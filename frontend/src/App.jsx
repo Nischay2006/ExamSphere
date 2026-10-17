@@ -2,12 +2,13 @@ import React, { useState, useEffect } from 'react';
 import Navbar from './components/Navbar';
 import StatsGrid from './components/StatsGrid';
 import MasterDataView from './components/MasterDataView';
+import SeatingAllocationView from './components/SeatingAllocationView';
 import AuditLogsView from './components/AuditLogsView';
 import DevSandboxView from './components/DevSandboxView';
 import FacultyDutyWorkloadView from './components/duty-management/FacultyDutyWorkloadView';
 import LoginModal from './components/LoginModal';
 import { api } from './api';
-import { Database, ShieldAlert, Cpu, Users } from 'lucide-react';
+import { Database, ShieldAlert, Cpu, Users, Grid } from 'lucide-react';
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -86,6 +87,14 @@ export default function App() {
           </button>
 
           <button
+            className={`tab-btn ${activeTab === 'seating' ? 'active' : ''}`}
+            onClick={() => setActiveTab('seating')}
+          >
+            <Grid size={16} />
+            <span>Smart Seating Allocation</span>
+          </button>
+
+          <button
             className={`tab-btn ${activeTab === 'audit-logs' ? 'active' : ''}`}
             onClick={() => setActiveTab('audit-logs')}
           >
@@ -109,6 +118,10 @@ export default function App() {
 
         {activeTab === 'master-data' && (
           <MasterDataView user={user} onDataChange={loadStats} />
+        )}
+
+        {activeTab === 'seating' && (
+          <SeatingAllocationView user={user} />
         )}
 
         {activeTab === 'audit-logs' && (
