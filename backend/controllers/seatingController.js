@@ -1,14 +1,43 @@
+
 const seatingService = require('../services/seatingService');
 
 /**
- * Thin Seating Allocation Controller
- * Follows 3-Tier Layered Architecture: validates input, delegates to SeatingService, formats HTTP responses
+ * Thin Seating Controller
+ * Delegates seating allocation and anti-cheating logic to SeatingService.
+ * Follows a 3-tier layered architecture.
  */
 
-/**
- * POST /api/allocations/seating
- * Allocate rooms based on capacity, assign student seats, and generate seating arrangements
- */
+// Allocate seating for an exam using the requested strategy.
+async function allocateSeating(req, res) {
+  try {
+    const { examId, roomIds, strategy } = req.body;
+
+    if (!examId) {
+      return res.status(400).json({
+        success: false,
+        message: 'examId is required.'
+      });
+    }
+
+    const result = await seatingService.allocateSeatingForExam(examId, {
+      roomIds,
+      strategy
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: result.message,
+      data: result
+    });
+  } catch (err) {
+    return res.status(err.statusCode || 500).json({
+      success: false,
+      message: err.message || 'Failed to allocate seating.'
+    });
+  }
+}
+
+// Allocate seats using the multi-exam allocation workflow.
 async function allocateSeats(req, res) {
   try {
     const { exam_ids, room_ids, strategy, clearExisting } = req.body;
@@ -35,10 +64,25 @@ async function allocateSeats(req, res) {
   }
 }
 
-/**
- * GET /api/allocations/exam/:examId
- * Fetch seating arrangement for a specific exam
- */
+// Retrieve seating arrangements for a specific exam.
+async function getSeatingForExam(req, res) {
+  try {
+    const data = await seatingService.getSeatingByExam(req.params.examId);
+
+    return res.json({
+      success: true,
+      count: data.length,
+      data
+    });
+  } catch (err) {
+    return res.status(err.statusCode || 500).json({
+      success: false,
+      message: err.message || 'Failed to retrieve seating.'
+    });
+  }
+}
+
+// Alternative exam retrieval endpoint used by the main branch.
 async function getSeatingByExam(req, res) {
   try {
     const { examId } = req.params;
@@ -56,17 +100,40 @@ async function getSeatingByExam(req, res) {
   }
 }
 
-/**
- * GET /api/allocations/room/:roomId
- * Fetch 2D room matrix layout for interactive visual seating grid
- */
+// Retrieve the room seating grid used by the current feature branch.
+async function getRoomSeatingGrid(req, res) {
+  try {
+    const { roomId } = req.params;
+    const { examId } = req.query;
+
+    const data = await seatingService.getRoomSeatingGrid(roomId, examId);
+
+    return res.json({
+      success: true,
+      data
+    });
+  } catch (err) {
+    return res.status(err.statusCode || 500).json({
+      success: false,
+      message: err.message || 'Failed to retrieve room seating grid.'
+    });
+  }
+}
+
+// Retrieve the 2D room layout used by the main branch.
 async function getRoomLayout(req, res) {
   try {
     const { roomId } = req.params;
     const { examId, exam_id, strict } = req.query;
+
     const targetExamId = examId || exam_id || null;
     const isStrict = strict === 'true' || strict === true;
-    const data = await seatingService.getRoomLayout(roomId, targetExamId, isStrict);
+
+    const data = await seatingService.getRoomLayout(
+      roomId,
+      targetExamId,
+      isStrict
+    );
 
     return res.status(200).json({
       success: true,
@@ -80,10 +147,26 @@ async function getRoomLayout(req, res) {
   }
 }
 
-/**
- * DELETE /api/allocations/exam/:examId
- * Clear all seating allocations for an exam
- */
+// Retrieve an overview of rooms and their seating status.
+async function getRoomsOverview(req, res) {
+  try {
+    const { examId } = req.query;
+    const data = await seatingService.getRoomsOverview(examId);
+
+    return res.json({
+      success: true,
+      count: data.length,
+      data
+    });
+  } catch (err) {
+    return res.status(err.statusCode || 500).json({
+      success: false,
+      message: err.message || 'Failed to retrieve rooms overview.'
+    });
+  }
+}
+
+// Clear seating allocations while preserving user information for auditing.
 async function clearAllocations(req, res) {
   try {
     const { examId } = req.params;
@@ -93,7 +176,9 @@ async function clearAllocations(req, res) {
 
     return res.status(200).json({
       success: true,
-      message: `Cleared ${result.deletedCount} seat allocations for exam ID ${examId}.`,
+      message: result.deletedCount !== undefined
+        ? `Cleared ${result.deletedCount} seat allocations for exam ID ${examId}.`
+        : 'Seat allocations cleared successfully.',
       data: result
     });
   } catch (err) {
@@ -104,10 +189,7 @@ async function clearAllocations(req, res) {
   }
 }
 
-/**
- * GET /api/allocations/exams
- * List all exams with their current allocation status
- */
+// List exams with their current allocation status.
 async function getExamsList(req, res) {
   try {
     const data = await seatingService.getExamsWithAllocationStatus();
@@ -125,10 +207,7 @@ async function getExamsList(req, res) {
   }
 }
 
-/**
- * POST /api/allocations/seed-demo-exams
- * Helper to populate initial demo exams if table is empty
- */
+// Seed demo exams when the database is empty.
 async function seedDemoExams(req, res) {
   try {
     const result = await seatingService.seedDemoExamsIfEmpty();
@@ -146,10 +225,7 @@ async function seedDemoExams(req, res) {
   }
 }
 
-/**
- * GET /api/allocations/enrolled-students/:examId
- * Fetch all enrolled students for an exam with their current seat status
- */
+// Retrieve enrolled students and their seat status.
 async function getEnrolledStudents(req, res) {
   try {
     const { examId } = req.params;
@@ -167,10 +243,7 @@ async function getEnrolledStudents(req, res) {
   }
 }
 
-/**
- * POST /api/allocations/manual-save
- * Save batch manual seat allocations
- */
+// Save multiple manual seat assignments.
 async function saveManual(req, res) {
   try {
     const { exam_id, room_id, assignments } = req.body;
@@ -196,13 +269,18 @@ async function saveManual(req, res) {
   }
 }
 
-/**
- * POST /api/allocations/manual-seat
- * Assign single student to a seat
- */
+// Assign a single student to a seat.
 async function assignSeat(req, res) {
   try {
-    const { exam_id, room_id, student_id, row_num, col_num, seat_number } = req.body;
+    const {
+      exam_id,
+      room_id,
+      student_id,
+      row_num,
+      col_num,
+      seat_number
+    } = req.body;
+
     const userId = req.user ? req.user.id : null;
 
     const result = await seatingService.assignSingleSeat({
@@ -227,10 +305,7 @@ async function assignSeat(req, res) {
   }
 }
 
-/**
- * DELETE /api/allocations/manual-seat
- * Unassign/remove student from a desk
- */
+// Remove a student from a seat.
 async function unassignSeat(req, res) {
   try {
     const { exam_id, room_id, row_num, col_num } = req.body;
@@ -257,14 +332,23 @@ async function unassignSeat(req, res) {
 }
 
 module.exports = {
+  // Feature branch endpoints
+  allocateSeating,
+  getSeatingForExam,
+  getRoomSeatingGrid,
+  getRoomsOverview,
+
+  // Main branch endpoints
   allocateSeats,
   getSeatingByExam,
   getRoomLayout,
-  clearAllocations,
   getExamsList,
   seedDemoExams,
   getEnrolledStudents,
   saveManual,
   assignSeat,
-  unassignSeat
+  unassignSeat,
+
+  // Shared endpoint
+  clearAllocations
 };

@@ -1,6 +1,12 @@
+
 const express = require('express');
 const router = express.Router();
+
 const {
+  allocateSeating,
+  getSeatingForExam,
+  getRoomSeatingGrid,
+  getRoomsOverview,
   allocateSeats,
   getSeatingByExam,
   getRoomLayout,
@@ -12,29 +18,92 @@ const {
   assignSeat,
   unassignSeat
 } = require('../controllers/seatingController');
+
 const { verifyToken, requireRole } = require('../middleware/authMiddleware');
 
-// All allocation endpoints require authentication
+// All seating endpoints require authentication.
 router.use(verifyToken);
 
-// Exam listing & allocation status
-router.get('/exams', getExamsList);
+// Read endpoints: accessible by ADMIN and FACULTY.
+router.get(
+  '/rooms-overview',
+  requireRole('ADMIN', 'FACULTY'),
+  getRoomsOverview
+);
 
-// Enrolled students for an exam
-router.get('/enrolled-students/:examId', getEnrolledStudents);
+router.get(
+  '/exam/:examId',
+  requireRole('ADMIN', 'FACULTY'),
+  getSeatingForExam
+);
 
-// Seating queries
-router.get('/exam/:examId', getSeatingByExam);
-router.get('/room/:roomId', getRoomLayout);
+router.get(
+  '/room/:roomId/grid',
+  requireRole('ADMIN', 'FACULTY'),
+  getRoomSeatingGrid
+);
 
-// Mutations require ADMIN role
-router.post('/seating', requireRole('ADMIN'), allocateSeats);
-router.delete('/exam/:examId', requireRole('ADMIN'), clearAllocations);
-router.post('/seed-demo-exams', requireRole('ADMIN'), seedDemoExams);
+router.get(
+  '/room/:roomId',
+  requireRole('ADMIN', 'FACULTY'),
+  getRoomLayout
+);
 
-// Manual seating routes
-router.post('/manual-save', requireRole('ADMIN'), saveManual);
-router.post('/manual-seat', requireRole('ADMIN'), assignSeat);
-router.delete('/manual-seat', requireRole('ADMIN'), unassignSeat);
+router.get(
+  '/exams',
+  requireRole('ADMIN', 'FACULTY'),
+  getExamsList
+);
+
+router.get(
+  '/enrolled-students/:examId',
+  requireRole('ADMIN', 'FACULTY'),
+  getEnrolledStudents
+);
+
+// Allocation endpoints: ADMIN only.
+router.post(
+  '/allocate',
+  requireRole('ADMIN'),
+  allocateSeating
+);
+
+router.post(
+  '/seating',
+  requireRole('ADMIN'),
+  allocateSeats
+);
+
+router.delete(
+  '/exam/:examId',
+  requireRole('ADMIN'),
+  clearAllocations
+);
+
+// Demo data initialization: ADMIN only.
+router.post(
+  '/seed-demo-exams',
+  requireRole('ADMIN'),
+  seedDemoExams
+);
+
+// Manual seating management: ADMIN only.
+router.post(
+  '/manual-save',
+  requireRole('ADMIN'),
+  saveManual
+);
+
+router.post(
+  '/manual-seat',
+  requireRole('ADMIN'),
+  assignSeat
+);
+
+router.delete(
+  '/manual-seat',
+  requireRole('ADMIN'),
+  unassignSeat
+);
 
 module.exports = router;

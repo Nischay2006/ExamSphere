@@ -6,7 +6,7 @@ export default function DevSandboxView() {
     {
       id: '1',
       name: 'Authentication & Role Management',
-      functionality: 'Login, JWT authentication, role-based access for Admin, Faculty, Invigilator and Student.',
+      description: 'Login, JWT authentication, role-based access for Admin, Faculty, Invigilator and Student.',
       status: 'COMPLETED & LIVE',
       endpoints: ['POST /api/auth/login', 'POST /api/auth/register', 'GET /api/auth/me'],
       icon: CheckCircle2,
@@ -15,7 +15,7 @@ export default function DevSandboxView() {
     {
       id: '2',
       name: 'Resource & Data Management',
-      functionality: 'Student, faculty, course and room CRUD operations; CSV bulk upload and data validation.',
+      description: 'Student, faculty, course and room CRUD operations; CSV bulk upload and data validation.',
       status: 'COMPLETED & LIVE',
       endpoints: ['GET/POST /api/master-data/:type', 'POST /api/master-data/upload-csv/:type'],
       icon: Database,
@@ -24,16 +24,16 @@ export default function DevSandboxView() {
     {
       id: '3',
       name: 'Exam Scheduling',
-      functionality: 'Create examinations, generate timetables and detect scheduling conflicts.',
+      description: 'Create examinations, generate timetables and detect scheduling conflicts.',
       status: 'Ready for Development',
-      endpoints: ['POST /api/exams/schedule', 'GET /api/exams/conflicts'],
+      endpoints: ['GET /api/scheduling/exams', 'POST /api/scheduling/generate', 'GET /api/scheduling/conflicts'],
       icon: Calendar,
       color: '#f59e0b'
     },
     {
       id: '4',
       name: 'Smart Room & Seating Allocation',
-      functionality: 'Allocate rooms based on capacity, assign student seats and apply anti-cheating seating rules.',
+      description: 'Allocate rooms based on capacity, assign student seats and apply anti-cheating seating rules.',
       status: 'COMPLETED & LIVE',
       endpoints: ['POST /api/allocations/seating', 'GET /api/allocations/exam/:id', 'GET /api/allocations/room/:id'],
       icon: ShieldCheck,
@@ -42,25 +42,25 @@ export default function DevSandboxView() {
     {
       id: '5',
       name: 'Faculty Duty & Workload Management',
-      functionality: 'Assign invigilators to rooms and time slots, check faculty availability and balance workloads.',
-      status: 'Ready for Development',
-      endpoints: ['POST /api/duty/allocate', 'GET /api/duty/faculty/:id'],
+      description: 'Assign invigilators to rooms and time slots, check faculty availability and balance workloads.',
+      status: 'COMPLETED & LIVE',
+      endpoints: ['POST /api/duty/auto-allocate', 'GET /api/duty/roster', 'GET /api/duty/workload-stats'],
       icon: Users,
-      color: '#f59e0b'
+      color: '#10b981'
     },
     {
       id: '6',
       name: 'Faculty Portal & Doubt Resolution',
-      functionality: 'Allow faculty to view examination schedules and assigned duties, receive student doubt requests and respond to them.',
+      description: 'Allow faculty to view examination schedules and assigned duties, receive student doubt requests and respond to them.',
       status: 'Ready for Development',
-      endpoints: ['GET /api/faculty/duties', 'POST /api/doubts/respond'],
+      endpoints: ['GET /api/faculty/duties', 'GET /api/doubts/stream', 'PUT /api/doubts/:id/resolve'],
       icon: Users,
       color: '#06b6d4'
     },
     {
       id: '7',
       name: 'Invigilator Portal & Attendance',
-      functionality: 'View assigned duties, verify student identities, perform camera-based face matching and record attendance.',
+      description: 'View assigned duties, verify student identities, perform camera-based face matching and record attendance.',
       status: 'Ready for Development',
       endpoints: ['GET /api/invigilator/students', 'POST /api/attendance/verify'],
       icon: Eye,
@@ -69,25 +69,25 @@ export default function DevSandboxView() {
     {
       id: '8',
       name: 'Exam-Day Incident Management',
-      functionality: 'Submit Unfair Means (UFM) reports with photo evidence and written statements, manage incident records and find substitute invigilators.',
+      description: 'Submit Unfair Means (UFM) reports with photo evidence and written statements, manage incident records and find substitute invigilators.',
       status: 'Ready for Development',
-      endpoints: ['POST /api/ufm/report', 'POST /api/substitute/find'],
+      endpoints: ['POST /api/ufm/report', 'POST /api/doubts/ping', 'POST /api/substitute/find'],
       icon: AlertOctagon,
       color: '#06b6d4'
     },
     {
       id: '9',
       name: 'Notification & Alert System',
-      functionality: 'Send student examination and seating emails, faculty duty notifications and emergency alerts; track notification status.',
+      description: 'Send student examination and seating emails, faculty duty notifications and emergency alerts; track notification status.',
       status: 'Ready for Development',
-      endpoints: ['POST /api/notifications/seating', 'POST /api/notifications/duty-alert'],
+      endpoints: ['POST /api/notifications/hall-ticket', 'POST /api/notifications/duty-alert'],
       icon: Bell,
       color: '#8b5cf6'
     },
     {
       id: '10',
       name: 'Analytics & Reports',
-      functionality: 'Generate attendance statistics, room utilization reports, faculty workload reports and UFM summaries for administrators.',
+      description: 'Generate attendance statistics, room utilization reports, faculty workload reports and UFM summaries for administrators.',
       status: 'Ready for Development',
       endpoints: ['GET /api/analytics/room-utilization', 'GET /api/analytics/attendance-stats'],
       icon: BarChart3,
@@ -106,7 +106,6 @@ export default function DevSandboxView() {
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.25rem' }}>
         {modules.map((m) => {
-          const IconComp = m.icon;
           const isLive = m.status.includes('LIVE');
           return (
             <div
@@ -144,7 +143,7 @@ export default function DevSandboxView() {
                 </div>
                 <h4 style={{ fontSize: '1.02rem', fontWeight: 700, color: '#f3f4f6', marginBottom: '0.4rem' }}>{m.name}</h4>
                 <p style={{ fontSize: '0.82rem', color: '#9ca3af', lineHeight: '1.45' }}>
-                  {m.functionality}
+                  {m.description}
                 </p>
               </div>
 

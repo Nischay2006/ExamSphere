@@ -32,10 +32,17 @@ app.get('/api/health', (req, res) => {
 });
 
 // Mount Module Routes
-app.use('/api/auth', authRoutes);                   // Module 1: Auth & RBAC
-app.use('/api/master-data', masterDataRoutes);       // Module 2: Master Data & Bulk CSV
-app.use('/api/admin', auditRoutes);                 // Module 11: Audit Logs & Stats
-app.use('/api/allocations', seatingRoutes);         // Module 4: Room & Anti-Cheating Seating Allocation
+
+ // Mount Module Routes
+app.use('/api/auth', authRoutes);              // Module 1: Auth & RBAC
+app.use('/api/master-data', masterDataRoutes);  // Module 2: Master Data & Bulk CSV
+app.use('/api/admin', auditRoutes);             // Module 11: Audit Logs & Stats
+
+app.use('/api/scheduling', schedulingRoutes);   // Module 3: Scheduling & Timetable
+app.use('/api/seating', seatingRoutes);         // Module 4: Anti-Cheating Seating
+app.use('/api/allocations', seatingRoutes);     // Module 4: Room & Seating Allocation
+app.use('/api/duty', dutyRoutes);               // Module 5: Faculty Duty Balancer
+
 
 // 404 Handler
 app.use((req, res) => {

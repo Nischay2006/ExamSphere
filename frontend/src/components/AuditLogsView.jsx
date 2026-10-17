@@ -2,18 +2,80 @@ import React, { useState, useEffect } from 'react';
 import { Activity, RefreshCw } from 'lucide-react';
 import { api } from '../api';
 
+// Fallback demo audit logs
+const MOCK_AUDIT_LOGS = [
+  {
+    id: 1,
+    created_at: new Date(Date.now() - 3600000 * 2).toISOString(),
+    user_name: 'ExamSphere Admin',
+    user_email: 'admin@examsphere.edu',
+    module: 'DUTY_MANAGEMENT',
+    action: 'AUTO_ALLOCATE',
+    details: 'Equi-variance duty allocation executed across 4 faculty members. Workload Fairness Index: 100%.',
+    ip_address: '127.0.0.1'
+  },
+  {
+    id: 2,
+    created_at: new Date(Date.now() - 3600000 * 5).toISOString(),
+    user_name: 'ExamSphere Admin',
+    user_email: 'admin@examsphere.edu',
+    module: 'DUTY_MANAGEMENT',
+    action: 'ASSIGN_DUTY',
+    details: 'Assigned Dr. Harsh Taneja (FAC103) to Room E2-101 for CSE3005 Software Engineering End-Term.',
+    ip_address: '127.0.0.1'
+  },
+  {
+    id: 3,
+    created_at: new Date(Date.now() - 3600000 * 12).toISOString(),
+    user_name: 'ExamSphere Admin',
+    user_email: 'admin@examsphere.edu',
+    module: 'DUTY_MANAGEMENT',
+    action: 'SUBSTITUTE_DUTY',
+    details: 'Reassigned Room E2-201 duty from Dr. Nishtha Phutela to Dr. Sukhandeep Kaur.',
+    ip_address: '127.0.0.1'
+  },
+  {
+    id: 4,
+    created_at: new Date(Date.now() - 3600000 * 24).toISOString(),
+    user_name: 'ExamSphere Admin',
+    user_email: 'admin@examsphere.edu',
+    module: 'MASTER_DATA',
+    action: 'CSV_IMPORT',
+    details: 'Batch imported 40 student enrollments for B.Tech Semester 6.',
+    ip_address: '127.0.0.1'
+  },
+  {
+    id: 5,
+    created_at: new Date(Date.now() - 3600000 * 28).toISOString(),
+    user_name: 'ExamSphere Admin',
+    user_email: 'admin@examsphere.edu',
+    module: 'SECURITY',
+    action: 'USER_LOGIN',
+    details: 'Administrator logged in successfully via JWT session.',
+    ip_address: '127.0.0.1'
+  }
+];
+
 export default function AuditLogsView() {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [isUsingDemoFallback, setIsUsingDemoFallback] = useState(false);
 
   const fetchLogs = async () => {
     setLoading(true);
     try {
       const res = await api.getAuditLogs();
-      setLogs(res.data || []);
+      if (res.data && res.data.length > 0) {
+        setLogs(res.data);
+        setIsUsingDemoFallback(false);
+      } else {
+        setLogs(MOCK_AUDIT_LOGS);
+        setIsUsingDemoFallback(true);
+      }
     } catch (err) {
-      console.error(err);
-      setLogs([]);
+      console.warn('Backend note, loading fallback audit logs:', err.message);
+      setLogs(MOCK_AUDIT_LOGS);
+      setIsUsingDemoFallback(true);
     } finally {
       setLoading(false);
     }
@@ -27,7 +89,14 @@ export default function AuditLogsView() {
     <div className="panel-card">
       <div className="panel-header">
         <div className="panel-title">
-          <h2>System Audit Trail</h2>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+            <h2>System Audit Trail</h2>
+            {isUsingDemoFallback && (
+              <span className="badge badge-emerald" style={{ fontSize: '0.72rem' }}>
+                Preview & Demo Active
+              </span>
+            )}
+          </div>
           <p>Module 11: Immutable log of administrative operations, data modifications, and security events</p>
         </div>
 

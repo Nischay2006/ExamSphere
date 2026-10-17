@@ -1,9 +1,15 @@
-const mysql = require('mysql2/promise');
+let mysql = null;
+try {
+  mysql = require('mysql2/promise');
+} catch (err) {
+  // mysql2 will be installed via npm install; allows headless unit tests to run
+}
+
 const path = require('path');
 require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
 
 // Create a connection pool to MySQL
-const pool = mysql.createPool({
+const pool = mysql ? mysql.createPool({
   host: process.env.DB_HOST || 'localhost',
   user: process.env.DB_USER || 'root',
   password: process.env.DB_PASSWORD || '',
@@ -14,10 +20,14 @@ const pool = mysql.createPool({
   queueLimit: 0,
   enableKeepAlive: true,
   keepAliveInitialDelay: 0
-});
+}) : null;
 
 // Test Database Connection
 async function testConnection() {
+  if (!pool) {
+    console.warn('⚠️  mysql2 is not installed. Run "npm install" in the backend directory.');
+    return false;
+  }
   try {
     const connection = await pool.getConnection();
     console.log(` MySQL Connected to database '${process.env.DB_NAME || 'examsphere_db'}' successfully.`);
@@ -32,6 +42,9 @@ async function testConnection() {
 
 module.exports = {
   pool,
-  query: (sql, params) => pool.execute(sql, params),
+  query: (sql, params) => {
+    if (!pool) throw new Error('Database pool not initialized. Run "npm install" in backend directory.');
+    return pool.execute(sql, params);
+  },
   testConnection
 };
