@@ -84,5 +84,57 @@ export const api = {
   },
   getAuditLogs() {
     return this.request('/admin/audit-logs');
+  },
+
+  // Module 4: Room & Seating Allocation Engine
+  getAllocationExams() {
+    return this.request('/allocations/exams');
+  },
+  allocateSeats(payload) {
+    return this.request('/allocations/seating', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+  },
+  getSeatingByExam(examId) {
+    return this.request(`/allocations/exam/${examId}`);
+  },
+  getRoomLayout(roomId, examId, strict = false) {
+    const params = [];
+    if (examId) params.push(`examId=${encodeURIComponent(examId)}`);
+    if (strict) params.push('strict=true');
+    const queryStr = params.length > 0 ? `?${params.join('&')}` : '';
+    return this.request(`/allocations/room/${roomId}${queryStr}`);
+  },
+  clearAllocations(examId) {
+    return this.request(`/allocations/exam/${examId}`, {
+      method: 'DELETE'
+    });
+  },
+  seedDemoExams() {
+    return this.request('/allocations/seed-demo-exams', {
+      method: 'POST'
+    });
+  },
+  getEnrolledStudents(examId) {
+    return this.request(`/allocations/enrolled-students/${examId}`);
+  },
+  saveManualSeating(payload) {
+    return this.request('/allocations/manual-save', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+  },
+  assignManualSeat(payload) {
+    return this.request('/allocations/manual-seat', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+  },
+  unassignManualSeat(payload) {
+    return this.request('/allocations/manual-seat', {
+      method: 'DELETE',
+      body: JSON.stringify(payload)
+    });
   }
 };

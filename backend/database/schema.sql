@@ -50,6 +50,20 @@ CREATE TABLE IF NOT EXISTS students (
 );
 
 -- --------------------------------------------------------------------
+-- 3b. STUDENT COURSE ENROLLMENTS TABLE (Module 2)
+-- --------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS student_courses (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    student_id INT NOT NULL,
+    course_id INT NOT NULL,
+    academic_year VARCHAR(20) DEFAULT '2025-2026',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_student_course (student_id, course_id),
+    FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE,
+    FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE
+);
+
+-- --------------------------------------------------------------------
 -- 4. FACULTY MASTER TABLE (Module 2)
 -- --------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS faculty (
