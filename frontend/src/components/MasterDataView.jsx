@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Upload, RefreshCw } from 'lucide-react';
+import { Search, Upload, RefreshCw, X } from 'lucide-react';
 import { api } from '../api';
 import CSVUploadModal from './CSVUploadModal';
 import StudentsTable from './master-data/StudentsTable';
@@ -111,13 +111,22 @@ export default function MasterDataView({ user, onDataChange }) {
 
         <div className="panel-controls">
           <div className="search-box">
-            <Search size={16} color="#6b7280" />
+            <Search size={16} />
             <input
               type="text"
               placeholder={`Search ${activeSubTab}...`}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
+            {search && (
+              <button
+                className="search-clear-btn"
+                onClick={() => setSearch('')}
+                title="Clear search"
+              >
+                <X size={13} />
+              </button>
+            )}
           </div>
 
           <button className="btn btn-secondary" onClick={fetchRecords} title="Refresh Records">

@@ -1,6 +1,8 @@
+```javascript
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+
 require('dotenv').config({ path: path.resolve(__dirname, '.env') });
 
 const { testConnection } = require('./config/db');
@@ -10,9 +12,9 @@ const authRoutes = require('./routes/authRoutes');
 const masterDataRoutes = require('./routes/masterDataRoutes');
 const auditRoutes = require('./routes/auditRoutes');
 const schedulingRoutes = require('./routes/schedulingRoutes'); // Module 3: Exam Scheduling
-const seatingRoutes = require('./routes/seatingRoutes');       // Module 4: Anti-Cheating Seating Allocation
+const seatingRoutes = require('./routes/seatingRoutes');       // Module 4: Seating Allocation
 const dutyRoutes = require('./routes/dutyRoutes');             // Module 5: Faculty Duty Balancer
-const incidentRoutes = require('./routes/incidentRoutes');     // Module 8: Exam-Day Incident Management (UFM)
+const incidentRoutes = require('./routes/incidentRoutes');     // Module 8: Exam-Day Incident Management
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -34,14 +36,15 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// Mount Module Routes
-app.use('/api/auth', authRoutes);                   // Module 1: Auth & RBAC
-app.use('/api/master-data', masterDataRoutes);       // Module 2: Master Data & Bulk CSV
-app.use('/api/admin', auditRoutes);                 // Module 11: Audit Logs & Stats
-app.use('/api/scheduling', schedulingRoutes);       // Module 3: Scheduling & Timetable
-app.use('/api/seating', seatingRoutes);             // Module 4: Anti-Cheating Seating
-app.use('/api/duty', dutyRoutes);                   // Module 5: Faculty Duty Balancer
-app.use('/api/incidents', incidentRoutes);          // Module 8: Exam-Day Incident Management (UFM)
+// Mount module routes
+app.use('/api/auth', authRoutes);             // Module 1: Auth & RBAC
+app.use('/api/master-data', masterDataRoutes); // Module 2: Master Data & Bulk CSV
+app.use('/api/admin', auditRoutes);           // Module 11: Audit Logs & Stats
+app.use('/api/scheduling', schedulingRoutes); // Module 3: Scheduling & Timetable
+app.use('/api/seating', seatingRoutes);       // Module 4: Anti-Cheating Seating
+app.use('/api/allocations', seatingRoutes);   // Module 4: Room & Seating Allocation
+app.use('/api/duty', dutyRoutes);             // Module 5: Faculty Duty Balancer
+app.use('/api/incidents', incidentRoutes);    // Module 8: Exam-Day Incident Management
 
 // 404 Handler
 app.use((req, res) => {
@@ -54,6 +57,7 @@ app.use((req, res) => {
 // Global Error Handler
 app.use((err, req, res, next) => {
   console.error('Unhandled Server Error:', err);
+
   res.status(err.status || 500).json({
     success: false,
     message: err.message || 'Internal Server Error'
@@ -62,11 +66,12 @@ app.use((err, req, res, next) => {
 
 // Start Server
 app.listen(PORT, async () => {
-  console.log(`====================================================`);
+  console.log('====================================================');
   console.log(` ExamSphere Backend Server running on port ${PORT}`);
   console.log(` Health Check: http://localhost:${PORT}/api/health`);
-  console.log(`====================================================`);
-  
+  console.log('====================================================');
+
   // Test MySQL connection on boot
   await testConnection();
 });
+```

@@ -5,9 +5,10 @@
   "scripts": {
     "start": "concurrently -n \"BACKEND,FRONTEND\" -c \"blue,green\" \"npm run backend\" \"npm run frontend\"",
     "dev": "concurrently -n \"BACKEND,FRONTEND\" -c \"blue,green\" \"npm run backend\" \"npm run frontend\"",
-    "backend": "npm start --prefix backend",
+    "backend": "npm run dev --prefix backend",
     "frontend": "npm run dev --prefix frontend",
-    "test": "npm test --prefix backend"
+    "test": "npm test --prefix backend",
+    "seed": "npm run seed --prefix backend"
   },
   "keywords": [
     "examsphere"

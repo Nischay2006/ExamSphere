@@ -27,6 +27,7 @@ export default function StudentsTable({ data, loading, onDelete }) {
           <th>Email Address</th>
           <th>Department</th>
           <th>Semester</th>
+          <th>Enrolled Subjects</th>
           <th>Program</th>
           <th>Actions</th>
         </tr>
@@ -39,6 +40,11 @@ export default function StudentsTable({ data, loading, onDelete }) {
             <td>{item.email}</td>
             <td><span className="badge badge-cyan">{item.department}</span></td>
             <td>Sem {item.semester}</td>
+            <td>
+              <span className="badge badge-emerald" style={{ fontSize: '0.74rem' }}>
+                {item.enrolled_courses || 'None'}
+              </span>
+            </td>
             <td>{item.program}</td>
             <td>
               <button

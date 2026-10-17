@@ -2,13 +2,14 @@ import React, { useState, useEffect } from 'react';
 import Navbar from './components/Navbar';
 import StatsGrid from './components/StatsGrid';
 import MasterDataView from './components/MasterDataView';
+import SeatingAllocationView from './components/SeatingAllocationView';
 import AuditLogsView from './components/AuditLogsView';
 import DevSandboxView from './components/DevSandboxView';
 import FacultyDutyWorkloadView from './components/duty-management/FacultyDutyWorkloadView';
 import ExamIncidentManagementView from './components/incident-management/ExamIncidentManagementView';
 import LoginModal from './components/LoginModal';
 import { api } from './api';
-import { Database, ShieldAlert, Cpu, Users, Gavel, FileText } from 'lucide-react';
+import { Database, ShieldAlert, Cpu, Users, Gavel, FileText, Grid } from 'lucide-react';
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -115,7 +116,7 @@ export default function App() {
             </span>
           </button>
 
-          {/* Admin Exclusive Tabs (Duty management & workload is strictly admin only) */}
+          {/* Admin Exclusive Tabs (Restricted for Faculty) */}
           {!isFaculty && (
             <>
               {/* Module 5: Faculty Duty & Workload Management */}
@@ -133,6 +134,14 @@ export default function App() {
               >
                 <Database size={16} />
                 <span>Resource & Data Management</span>
+              </button>
+
+              <button
+                className={`tab-btn ${activeTab === 'seating' ? 'active' : ''}`}
+                onClick={() => setActiveTab('seating')}
+              >
+                <Grid size={16} />
+                <span>Smart Seating Allocation</span>
               </button>
 
               <button
@@ -165,6 +174,10 @@ export default function App() {
 
         {!isFaculty && activeTab === 'master-data' && (
           <MasterDataView user={user} onDataChange={loadStats} />
+        )}
+
+        {!isFaculty && activeTab === 'seating' && (
+          <SeatingAllocationView user={user} />
         )}
 
         {!isFaculty && activeTab === 'audit-logs' && (

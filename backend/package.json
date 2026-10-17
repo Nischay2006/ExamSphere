@@ -3,13 +3,17 @@
   "version": "1.0.0",
   "description": "ExamSphere - Automated Exam Management System Backend",
   "main": "server.js",
+  
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
     "init-db": "node database/init-db.js",
-    "test": "node tests/test-auth-and-masterdata.js && node tests/test-duty-workload.js",
-    "test:duty": "node tests/test-duty-workload.js"
+    "test": "node tests/test-auth-and-masterdata.js && node tests/test-duty-workload.js && node tests/test-seating-engine.js",
+    "test:duty": "node tests/test-duty-workload.js",
+    "test:seating": "node tests/test-seating-engine.js",
+    "seed": "node database/seedDemoData.js"
   },
+
   "keywords": ["exam", "management", "system", "se"],
   "author": "ExamSphere Team",
   "license": "ISC",
