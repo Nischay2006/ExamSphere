@@ -7,7 +7,15 @@ const { query } = require('../config/db');
 class MasterDataService {
   // ===================== STUDENTS =====================
   async getAllStudents() {
-    const [rows] = await query('SELECT * FROM students ORDER BY enrollment_no ASC');
+    const [rows] = await query(`
+      SELECT s.*, 
+             COALESCE(GROUP_CONCAT(c.course_code ORDER BY c.course_code SEPARATOR ', '), 'None') AS enrolled_courses
+      FROM students s
+      LEFT JOIN student_courses sc ON s.id = sc.student_id
+      LEFT JOIN courses c ON sc.course_id = c.id
+      GROUP BY s.id
+      ORDER BY s.enrollment_no ASC
+    `);
     return rows;
   }
 

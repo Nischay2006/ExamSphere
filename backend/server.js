@@ -9,6 +9,7 @@ const { testConnection } = require('./config/db');
 const authRoutes = require('./routes/authRoutes');
 const masterDataRoutes = require('./routes/masterDataRoutes');
 const auditRoutes = require('./routes/auditRoutes');
+const seatingRoutes = require('./routes/seatingRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -34,6 +35,7 @@ app.get('/api/health', (req, res) => {
 app.use('/api/auth', authRoutes);                   // Module 1: Auth & RBAC
 app.use('/api/master-data', masterDataRoutes);       // Module 2: Master Data & Bulk CSV
 app.use('/api/admin', auditRoutes);                 // Module 11: Audit Logs & Stats
+app.use('/api/allocations', seatingRoutes);         // Module 4: Room & Anti-Cheating Seating Allocation
 
 // 404 Handler
 app.use((req, res) => {

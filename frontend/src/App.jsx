@@ -2,11 +2,12 @@ import React, { useState, useEffect } from 'react';
 import Navbar from './components/Navbar';
 import StatsGrid from './components/StatsGrid';
 import MasterDataView from './components/MasterDataView';
+import SeatingAllocationView from './components/SeatingAllocationView';
 import AuditLogsView from './components/AuditLogsView';
 import DevSandboxView from './components/DevSandboxView';
 import LoginModal from './components/LoginModal';
 import { api } from './api';
-import { Database, ShieldAlert, Cpu } from 'lucide-react';
+import { Database, ShieldAlert, Cpu, Grid } from 'lucide-react';
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -67,7 +68,15 @@ export default function App() {
             onClick={() => setActiveTab('master-data')}
           >
             <Database size={16} />
-            <span>Master Data (Module 2)</span>
+            <span>Resource & Data (Module 2)</span>
+          </button>
+
+          <button
+            className={`tab-btn ${activeTab === 'seating' ? 'active' : ''}`}
+            onClick={() => setActiveTab('seating')}
+          >
+            <Grid size={16} />
+            <span>Smart Seating (Module 4)</span>
           </button>
 
           <button
@@ -75,7 +84,7 @@ export default function App() {
             onClick={() => setActiveTab('audit-logs')}
           >
             <ShieldAlert size={16} />
-            <span>Audit Trail (Module 11)</span>
+            <span>System Audit Trail</span>
           </button>
 
           <button
@@ -83,13 +92,17 @@ export default function App() {
             onClick={() => setActiveTab('dev-hub')}
           >
             <Cpu size={16} />
-            <span>Team Modules Hub</span>
+            <span>Modules Hub (10 Modules)</span>
           </button>
         </div>
 
         {/* Tab Views */}
         {activeTab === 'master-data' && (
           <MasterDataView user={user} onDataChange={loadStats} />
+        )}
+
+        {activeTab === 'seating' && (
+          <SeatingAllocationView user={user} />
         )}
 
         {activeTab === 'audit-logs' && (
