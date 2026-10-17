@@ -504,20 +504,12 @@ class SeatingService {
       throw err;
     }
 
-    // 5. Persist to MySQL database with atomic cleanup
+    // 5. Persist to MySQL database with atomic cleanup (clears only the allocated exam(s), preserving other exams' seating plans)
     if (clearExisting) {
       await query(
         `DELETE FROM seat_allocations WHERE exam_id IN (${placeholders})`,
         examIdList
       );
-      const roomIdsToClear = roomsToUse.map((r) => r.id);
-      if (roomIdsToClear.length > 0) {
-        const roomPh = roomIdsToClear.map(() => '?').join(',');
-        await query(
-          `DELETE FROM seat_allocations WHERE room_id IN (${roomPh})`,
-          roomIdsToClear
-        );
-      }
     }
 
     // Insert allocations in batches
@@ -590,18 +582,6 @@ class SeatingService {
       const err = new Error('Valid examId is required.');
       err.statusCode = 400;
       throw err;
-    }
-
-    if (ids.length === 1) {
-      const [coExams] = await query(
-        `SELECT DISTINCT sa2.exam_id
-         FROM seat_allocations sa2
-         WHERE sa2.room_id IN (SELECT DISTINCT sa1.room_id FROM seat_allocations sa1 WHERE sa1.exam_id = ?)`,
-        [ids[0]]
-      );
-      if (coExams.length > 1) {
-        ids.splice(0, ids.length, ...coExams.map((c) => c.exam_id));
-      }
     }
 
     const ph = ids.map(() => '?').join(',');
@@ -958,8 +938,8 @@ class SeatingService {
     // Remove any previous seat this student has for this exam
     await query('DELETE FROM seat_allocations WHERE exam_id = ? AND student_id = ?', [exam_id, student_id]);
 
-    // Remove any seat currently occupying this desk (prevent double-booking)
-    await query('DELETE FROM seat_allocations WHERE room_id = ? AND row_num = ? AND col_num = ?', [room_id, row_num, col_num]);
+    // Remove any seat currently occupying this desk for this specific exam
+    await query('DELETE FROM seat_allocations WHERE exam_id = ? AND room_id = ? AND row_num = ? AND col_num = ?', [exam_id, room_id, row_num, col_num]);
 
     // Insert seat
     await query(
@@ -983,8 +963,8 @@ class SeatingService {
 
     if (exam_id) {
       await query(
-        'DELETE FROM seat_allocations WHERE room_id = ? AND row_num = ? AND col_num = ? AND (exam_id = ? OR 1=1)',
-        [room_id, row_num, col_num, exam_id]
+        'DELETE FROM seat_allocations WHERE exam_id = ? AND room_id = ? AND row_num = ? AND col_num = ?',
+        [exam_id, room_id, row_num, col_num]
       );
     } else {
       await query(

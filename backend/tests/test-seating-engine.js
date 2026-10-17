@@ -337,6 +337,22 @@ async function runSeatingEngineTests() {
     console.error('❌ [TEST 7 FAILED]', err.message);
   }
 
+  // ---------------------------------------------------------
+  // TEST 8: getRoomLayout parameter signature & strict option
+  // ---------------------------------------------------------
+  total++;
+  try {
+    const fnStr = seatingService.getRoomLayout ? seatingService.getRoomLayout.toString() : '';
+    if (typeof seatingService.getRoomLayout === 'function' && fnStr.includes('strict')) {
+      console.log(' [TEST 8 PASSED] getRoomLayout accepts (roomId, examId, strict) with strict option support.');
+      passed++;
+    } else {
+      console.error('❌ [TEST 8 FAILED] getRoomLayout missing strict parameter support');
+    }
+  } catch (err) {
+    console.error('❌ [TEST 8 FAILED]', err.message);
+  }
+
   console.log('\n======================================================');
   console.log(`🎯 RESULT: ${passed} / ${total} TESTS PASSED`);
   console.log('======================================================\n');

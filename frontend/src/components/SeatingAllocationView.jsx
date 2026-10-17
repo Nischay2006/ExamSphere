@@ -25,7 +25,10 @@ import {
   Lock,
   Trash2,
   Eye,
-  FileText
+  FileText,
+  ChevronDown,
+  ChevronUp,
+  List
 } from 'lucide-react';
 
 export default function SeatingAllocationView({ user }) {
@@ -72,6 +75,12 @@ export default function SeatingAllocationView({ user }) {
   const [arrangementsSearch, setArrangementsSearch] = useState('');
   const [arrangementsFilter, setArrangementsFilter] = useState('ALLOCATED'); // 'ALLOCATED' | 'ALL' | 'PENDING'
   const [deletingExamId, setDeletingExamId] = useState(null);
+
+  // Existing Plans Seating List State (No class visualization needed, only seating roster list)
+  const [expandedExamId, setExpandedExamId] = useState(null);
+  const [examAllocationsMap, setExamAllocationsMap] = useState({});
+  const [loadingExamAllocationsId, setLoadingExamAllocationsId] = useState(null);
+  const [examListSearchMap, setExamListSearchMap] = useState({});
 
   // Schedule Reset Confirmation Modal State
   const [scheduleResetModal, setScheduleResetModal] = useState({
@@ -219,10 +228,30 @@ export default function SeatingAllocationView({ user }) {
     }
   };
 
-  const loadManualRoomLayout = async (roomId = manualRoomId, examQuery = getActiveManualQuery()) => {
+  // Helper: Find first allocated room for an exam if available
+  const findExamAllocatedRoomId = useCallback((examId) => {
+    if (!examId) return null;
+    const exam = exams.find((e) => e.id.toString() === examId.toString());
+    if (!exam || !exam.allocated_room_numbers) return null;
+    const firstRoomNum = exam.allocated_room_numbers.split(',')[0].trim();
+    const rm = rooms.find((r) => r.room_number.toLowerCase() === firstRoomNum.toLowerCase());
+    return rm ? rm.id.toString() : null;
+  }, [exams, rooms]);
+
+  // Helper: Check if active subject(s) have an existing seating schedule
+  const checkHasExistingSchedule = useCallback((primaryId, secondaryId, isTwoPaper) => {
+    if (!primaryId) return false;
+    const pExam = exams.find((e) => e.id.toString() === primaryId.toString());
+    const sExam = (isTwoPaper && secondaryId) ? exams.find((e) => e.id.toString() === secondaryId.toString()) : null;
+    const hasP = pExam && (pExam.allocated_seats_count || 0) > 0;
+    const hasS = Boolean(isTwoPaper && sExam && (sExam.allocated_seats_count || 0) > 0);
+    return hasP || hasS;
+  }, [exams]);
+
+  const loadManualRoomLayout = async (roomId = manualRoomId, examQuery = getActiveManualQuery(), strict = true) => {
     if (!roomId || !examQuery) return;
     try {
-      const res = await api.getRoomLayout(roomId, examQuery);
+      const res = await api.getRoomLayout(roomId, examQuery, strict);
       setManualLayout(res.data);
     } catch (err) {
       console.log('Manual room layout fetch error:', err.message);
@@ -232,7 +261,7 @@ export default function SeatingAllocationView({ user }) {
   const reloadManualData = async () => {
     const queryStr = getActiveManualQuery();
     const tasks = [
-      loadManualRoomLayout(manualRoomId, queryStr),
+      loadManualRoomLayout(manualRoomId, queryStr, true),
       loadEnrolledStudents(selectedExamId),
       loadExamAllocation(queryStr)
     ];
@@ -294,20 +323,40 @@ export default function SeatingAllocationView({ user }) {
       }
     }
 
+    let secId = manualSecondaryExamId;
     if (manualTwoPaper && (!manualSecondaryExamId || manualSecondaryExamId.toString() === examId.toString())) {
       const altExam = exams.find((e) => e.id.toString() !== examId.toString());
       if (altExam) {
-        setManualSecondaryExamId(altExam.id.toString());
+        secId = altExam.id.toString();
+        setManualSecondaryExamId(secId);
       }
     }
 
     if (allocationMode === 'MANUAL') {
-      let secId = manualSecondaryExamId;
-      if (manualTwoPaper && (!secId || secId.toString() === examId.toString())) {
-        const alt = exams.find((e) => e.id.toString() !== examId.toString());
-        if (alt) secId = alt.id.toString();
+      const hasExisting = checkHasExistingSchedule(examId, secId, manualTwoPaper);
+      if (hasExisting) {
+        const pExam = exams.find((e) => e.id.toString() === examId.toString());
+        const sExam = (manualTwoPaper && secId) ? exams.find((e) => e.id.toString() === secId.toString()) : null;
+        const affected = [];
+        if (pExam && (pExam.allocated_seats_count || 0) > 0) affected.push(pExam);
+        if (manualTwoPaper && sExam && (sExam.allocated_seats_count || 0) > 0) affected.push(sExam);
+
+        setScheduleResetModal({
+          isOpen: true,
+          title: 'Existing Seating Schedule Detected',
+          message: 'Do you want to reset current schedule?',
+          examsToReset: affected,
+          actionType: 'CHANGE_PRIMARY',
+          targetExamId: examId,
+          targetSecondaryExamId: secId,
+          targetTwoPaper: manualTwoPaper,
+          targetRoomId: findExamAllocatedRoomId(examId) || manualRoomId
+        });
+        return;
       }
-      await ensureManualZeroSeating(examId, secId, manualTwoPaper);
+
+      await executeEnterManualMode(false, examId, secId, manualTwoPaper);
+      return;
     }
 
     const activeQuery = (enableInterleaving && nextSecondaryId && nextSecondaryId.toString() !== examId.toString())
@@ -317,7 +366,7 @@ export default function SeatingAllocationView({ user }) {
     await Promise.all([
       loadEnrolledStudents(examId),
       loadExamAllocation(activeQuery),
-      manualRoomId ? loadManualRoomLayout(manualRoomId, examId) : Promise.resolve()
+      manualRoomId ? loadManualRoomLayout(manualRoomId, examId, false) : Promise.resolve()
     ]);
   };
 
@@ -327,8 +376,7 @@ export default function SeatingAllocationView({ user }) {
     setHasClickedGenerate(false);
   };
 
-  // Helper: In manual seating studio, if there is already an existing seating arrangement,
-  // make it zero for those subject(s): for 1 subject if 1 subject mode, or for both if 2 subjects mode.
+  // Helper: Reset seating arrangement to zero for specified subject(s)
   const ensureManualZeroSeating = async (primaryId, secondaryId, isTwoPaper) => {
     if (!primaryId) return;
     const pExam = exams.find((e) => e.id.toString() === primaryId.toString());
@@ -346,38 +394,138 @@ export default function SeatingAllocationView({ user }) {
         await api.clearAllocations(ids.join(','));
         const updated = await api.getAllocationExams();
         setExams(updated.data || []);
-        showToast('Existing seating arrangement reset to zero for both subjects. Start placing students manually.');
       }
     } else {
       if (hasP) {
         await api.clearAllocations(primaryId);
         const updated = await api.getAllocationExams();
         setExams(updated.data || []);
-        showToast('Existing seating arrangement reset to zero for this subject. Start placing students manually.');
       }
     }
   };
 
-  // Switch to Manual mode: all students initially unselected, list defaults to ALL,
-  // and existing allocations reset to zero for the selected subject(s).
-  const handleSelectManualMode = async () => {
+  // Execute entry into Manual Mode:
+  // if shouldResetZero is true -> reset schedule to zero (make it zero)
+  // else -> arrange the current schedule in manual option
+  const executeEnterManualMode = async (shouldResetZero, primaryId, secondaryId, isTwoPaper, roomIdToUse) => {
     setAllocationMode('MANUAL');
-    setSelectedStudentToSeat(null); // Initially all students unselected!
-    setManualFilter('ALL'); // Show all students initially so list is never empty!
+    setSelectedStudentToSeat(null);
+    setManualFilter('ALL');
     setSub2Filter('ALL');
 
-    if (selectedExamId) {
-      let secId = manualSecondaryExamId;
-      if (!secId && exams.length > 1) {
-        const alt = exams.find((e) => e.id.toString() !== selectedExamId.toString());
-        if (alt) {
-          secId = alt.id.toString();
-          setManualSecondaryExamId(secId);
-        }
-      }
-      await ensureManualZeroSeating(selectedExamId, secId, manualTwoPaper);
-      await reloadManualData();
+    const targetRoom = roomIdToUse || findExamAllocatedRoomId(primaryId) || manualRoomId;
+    if (targetRoom) {
+      setManualRoomId(targetRoom);
     }
+
+    if (secondaryId) {
+      setManualSecondaryExamId(secondaryId);
+    }
+    setManualTwoPaper(Boolean(isTwoPaper));
+
+    if (shouldResetZero && primaryId) {
+      await ensureManualZeroSeating(primaryId, secondaryId, isTwoPaper);
+      showToast('Current schedule reset to zero. All desks are clear for manual placement.');
+    } else {
+      showToast('Current schedule loaded in Manual Option. Desks are arranged for manual editing.');
+    }
+
+    const q = (isTwoPaper && secondaryId && secondaryId.toString() !== primaryId.toString())
+      ? `${primaryId},${secondaryId}`
+      : (primaryId ? primaryId.toString() : '');
+
+    const tasks = [
+      loadManualRoomLayout(targetRoom, q, true),
+      loadEnrolledStudents(primaryId),
+      loadExamAllocation(q)
+    ];
+    if (isTwoPaper && secondaryId) {
+      tasks.push(loadSecondaryEnrolledStudents(secondaryId));
+    }
+    await Promise.all(tasks);
+  };
+
+  // Handle user response from the Reset Current Schedule prompt modal:
+  // if user says yes (resetToZero === true) -> make it zero!
+  // else (resetToZero === false) -> arrange the current schedule in manual option!
+  const handleConfirmResetModal = async (resetToZero) => {
+    const { actionType, targetExamId, targetSecondaryExamId, targetTwoPaper, targetRoomId } = scheduleResetModal;
+    setScheduleResetModal((prev) => ({ ...prev, isOpen: false }));
+
+    if (actionType === 'ENTER_MANUAL') {
+      await executeEnterManualMode(resetToZero, targetExamId, targetSecondaryExamId, targetTwoPaper, targetRoomId);
+    } else if (actionType === 'CHANGE_PRIMARY') {
+      setSelectedExamId(targetExamId.toString());
+      await executeEnterManualMode(resetToZero, targetExamId, targetSecondaryExamId, targetTwoPaper, targetRoomId);
+    } else if (actionType === 'TOGGLE_TWO_PAPER') {
+      setManualTwoPaper(true);
+      if (targetSecondaryExamId) setManualSecondaryExamId(targetSecondaryExamId.toString());
+      if (resetToZero) {
+        await ensureManualZeroSeating(targetExamId, targetSecondaryExamId, true);
+        showToast('Current schedule reset to zero for both subjects. Start placing students manually.');
+      } else {
+        showToast('Current schedule loaded for both subjects in Manual Option. Desks are arranged for manual editing.');
+      }
+      await reloadManualData();
+    } else if (actionType === 'CHANGE_SECONDARY') {
+      setManualSecondaryExamId(targetSecondaryExamId.toString());
+      if (resetToZero) {
+        await api.clearAllocations(targetSecondaryExamId);
+        const updatedExams = await api.getAllocationExams();
+        setExams(updatedExams.data || []);
+        showToast('Current schedule reset to zero for secondary subject. Desks are vacant.');
+      } else {
+        showToast('Current schedule loaded for secondary subject in Manual Option.');
+      }
+      await loadSecondaryEnrolledStudents(targetSecondaryExamId);
+      await loadManualRoomLayout(manualRoomId, `${targetExamId},${targetSecondaryExamId}`, true);
+    }
+  };
+
+  // Switch to Manual mode:
+  // Before making it zero, ask user: "Do you want to reset current schedule?"
+  // If user says yes -> make it zero.
+  // Else -> arrange current schedule in manual option!
+  const handleSelectManualMode = async () => {
+    let secId = manualSecondaryExamId;
+    if (manualTwoPaper && (!secId || secId.toString() === selectedExamId.toString()) && exams.length > 1) {
+      const alt = exams.find((e) => e.id.toString() !== selectedExamId.toString());
+      if (alt) {
+        secId = alt.id.toString();
+        setManualSecondaryExamId(secId);
+      }
+    }
+
+    const hasExisting = checkHasExistingSchedule(selectedExamId, secId, manualTwoPaper);
+    if (hasExisting) {
+      const pExam = exams.find((e) => e.id.toString() === selectedExamId.toString());
+      const sExam = (manualTwoPaper && secId) ? exams.find((e) => e.id.toString() === secId.toString()) : null;
+      const affected = [];
+      if (pExam && (pExam.allocated_seats_count || 0) > 0) affected.push(pExam);
+      if (manualTwoPaper && sExam && (sExam.allocated_seats_count || 0) > 0) affected.push(sExam);
+
+      setScheduleResetModal({
+        isOpen: true,
+        title: 'Existing Seating Schedule Detected',
+        message: 'Do you want to reset current schedule?',
+        examsToReset: affected,
+        actionType: 'ENTER_MANUAL',
+        targetExamId: selectedExamId,
+        targetSecondaryExamId: secId,
+        targetTwoPaper: manualTwoPaper,
+        targetRoomId: findExamAllocatedRoomId(selectedExamId) || manualRoomId
+      });
+      return;
+    }
+
+    await executeEnterManualMode(false, selectedExamId, secId, manualTwoPaper);
+  };
+
+  // Direct action from Existing Plans archive: Arrange directly in Manual Studio
+  const handleArrangeExamInManual = async (exam) => {
+    setSelectedExamId(exam.id.toString());
+    const allocRoomId = findExamAllocatedRoomId(exam.id);
+    await executeEnterManualMode(false, exam.id.toString(), manualSecondaryExamId, false, allocRoomId);
   };
 
   // --------------------------------------------------------------------------
@@ -410,13 +558,29 @@ export default function SeatingAllocationView({ user }) {
     setHasClickedGenerate(false);
   };
 
-  const handleViewExamPlanInGrid = async (exam) => {
-    setSelectedExamId(exam.id.toString());
-    setAllocationMode('AUTOMATIC');
-    setHasClickedGenerate(true);
-    await loadExamAllocation(exam.id.toString());
-    await loadEnrolledStudents(exam.id.toString());
-    showToast(`Loaded seating arrangement for ${exam.course_code} in 2D Classroom Visualizer.`);
+  // Toggle inline seating list for an exam in Existing Plans view (no classroom visualization needed)
+  const handleToggleExamSeatingList = async (exam) => {
+    if (expandedExamId === exam.id) {
+      setExpandedExamId(null);
+      return;
+    }
+
+    setExpandedExamId(exam.id);
+
+    if (!examAllocationsMap[exam.id]) {
+      setLoadingExamAllocationsId(exam.id);
+      try {
+        const res = await api.getSeatingByExam(exam.id);
+        setExamAllocationsMap((prev) => ({
+          ...prev,
+          [exam.id]: res.data?.allocations || []
+        }));
+      } catch (err) {
+        showToast(`Failed to load seating list: ${err.message}`);
+      } finally {
+        setLoadingExamAllocationsId(null);
+      }
+    }
   };
 
   const handleDownloadExamCSV = async (exam) => {
@@ -442,6 +606,16 @@ export default function SeatingAllocationView({ user }) {
       await api.clearAllocations(exam.id);
       const updatedExams = await api.getAllocationExams();
       setExams(updatedExams.data || []);
+
+      // Clean up expanded seating list cache
+      setExamAllocationsMap((prev) => {
+        const copy = { ...prev };
+        delete copy[exam.id];
+        return copy;
+      });
+      if (expandedExamId === exam.id) {
+        setExpandedExamId(null);
+      }
 
       if (selectedExamId === exam.id.toString()) {
         setAllocationData(null);
@@ -473,6 +647,8 @@ export default function SeatingAllocationView({ user }) {
       await api.clearAllocations(allIds);
       const updatedExams = await api.getAllocationExams();
       setExams(updatedExams.data || []);
+      setExamAllocationsMap({});
+      setExpandedExamId(null);
       setAllocationData(null);
       setRoomLayout(null);
       setHasClickedGenerate(false);
@@ -1103,6 +1279,262 @@ export default function SeatingAllocationView({ user }) {
         >
           <AlertTriangle size={18} color="#f59e0b" />
           <span>{toastMessage}</span>
+        </div>
+      )}
+
+      {/* Schedule Reset Confirmation Modal */}
+      {scheduleResetModal.isOpen && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '100vw',
+            height: '100vh',
+            background: 'rgba(0, 0, 0, 0.78)',
+            backdropFilter: 'blur(6px)',
+            WebkitBackdropFilter: 'blur(6px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 999999,
+            padding: '1.5rem',
+            animation: 'fadeIn 0.2s ease-in-out'
+          }}
+          onClick={() => setScheduleResetModal((prev) => ({ ...prev, isOpen: false }))}
+        >
+          <div
+            style={{
+              background: 'linear-gradient(145deg, #181926, #12131f)',
+              border: '1px solid rgba(245, 158, 11, 0.4)',
+              borderRadius: '16px',
+              maxWidth: '560px',
+              width: '100%',
+              padding: '2rem',
+              boxShadow: '0 24px 60px rgba(0, 0, 0, 0.8), 0 0 30px rgba(245, 158, 11, 0.15)',
+              position: 'relative'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Close button */}
+            <button
+              onClick={() => setScheduleResetModal((prev) => ({ ...prev, isOpen: false }))}
+              style={{
+                position: 'absolute',
+                top: '1.25rem',
+                right: '1.25rem',
+                background: 'rgba(255, 255, 255, 0.06)',
+                border: '1px solid rgba(255, 255, 255, 0.12)',
+                color: 'var(--text-muted)',
+                borderRadius: '8px',
+                width: '32px',
+                height: '32px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                transition: 'var(--transition)'
+              }}
+              title="Cancel & Dismiss"
+            >
+              ✕
+            </button>
+
+            {/* Header with Icon */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', marginBottom: '1.25rem' }}>
+              <div
+                style={{
+                  width: '46px',
+                  height: '46px',
+                  borderRadius: '12px',
+                  background: 'rgba(245, 158, 11, 0.15)',
+                  border: '1px solid rgba(245, 158, 11, 0.35)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: 'var(--accent-amber)',
+                  flexShrink: 0
+                }}
+              >
+                <AlertTriangle size={24} />
+              </div>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 700, color: '#fff' }}>
+                  {scheduleResetModal.title}
+                </h3>
+                <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.88rem', color: 'var(--accent-amber)', fontWeight: 600 }}>
+                  {scheduleResetModal.message}
+                </p>
+              </div>
+            </div>
+
+            {/* Existing Schedule Summary Card */}
+            <div
+              style={{
+                background: 'rgba(255, 255, 255, 0.03)',
+                border: '1px solid rgba(255, 255, 255, 0.08)',
+                borderRadius: '10px',
+                padding: '1rem',
+                marginBottom: '1.5rem'
+              }}
+            >
+              <div style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', marginBottom: '0.65rem' }}>
+                Current Active Seating Arrangement:
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                {scheduleResetModal.examsToReset.map((ex) => (
+                  <div
+                    key={ex.id}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '0.6rem 0.85rem',
+                      borderRadius: '8px',
+                      background: 'rgba(255, 255, 255, 0.04)',
+                      border: '1px solid rgba(255, 255, 255, 0.06)'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                      <span className="badge badge-indigo" style={{ fontWeight: 700, fontSize: '0.8rem' }}>
+                        {ex.course_code}
+                      </span>
+                      <span style={{ fontSize: '0.84rem', color: 'var(--text-main)', fontWeight: 500 }}>
+                        {ex.course_name || ex.exam_name}
+                      </span>
+                    </div>
+                    <span className="badge badge-emerald" style={{ fontWeight: 700, fontSize: '0.8rem' }}>
+                      {ex.allocated_seats_count || 0} Students Seated
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Decision Buttons */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+              {/* Option 1: Yes, Reset Schedule to Zero */}
+              <button
+                onClick={() => handleConfirmResetModal(true)}
+                style={{
+                  background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.18), rgba(185, 28, 28, 0.28))',
+                  border: '1px solid rgba(239, 68, 68, 0.6)',
+                  borderRadius: '10px',
+                  padding: '0.95rem 1.15rem',
+                  textAlign: 'left',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  transition: 'var(--transition)'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'linear-gradient(135deg, rgba(239, 68, 68, 0.35), rgba(185, 28, 28, 0.45))';
+                  e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.9)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'linear-gradient(135deg, rgba(239, 68, 68, 0.18), rgba(185, 28, 28, 0.28))';
+                  e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.6)';
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+                  <div
+                    style={{
+                      width: '38px',
+                      height: '38px',
+                      borderRadius: '8px',
+                      background: 'rgba(239, 68, 68, 0.25)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: '#f87171',
+                      flexShrink: 0
+                    }}
+                  >
+                    <RotateCcw size={18} />
+                  </div>
+                  <div>
+                    <strong style={{ display: 'block', fontSize: '0.92rem', color: '#fca5a5' }}>
+                      Yes, Reset Current Schedule (Make it Zero)
+                    </strong>
+                    <span style={{ fontSize: '0.76rem', color: 'rgba(252, 165, 165, 0.75)' }}>
+                      Clear all desks to zero allocations and start fresh with all students unseated
+                    </span>
+                  </div>
+                </div>
+                <ChevronRight size={18} color="#fca5a5" />
+              </button>
+
+              {/* Option 2: No, Arrange Current Schedule in Manual Option */}
+              <button
+                onClick={() => handleConfirmResetModal(false)}
+                style={{
+                  background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.18), rgba(5, 150, 105, 0.28))',
+                  border: '1px solid rgba(16, 185, 129, 0.6)',
+                  borderRadius: '10px',
+                  padding: '0.95rem 1.15rem',
+                  textAlign: 'left',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  transition: 'var(--transition)'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'linear-gradient(135deg, rgba(16, 185, 129, 0.35), rgba(5, 150, 105, 0.45))';
+                  e.currentTarget.style.borderColor = 'rgba(16, 185, 129, 0.9)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'linear-gradient(135deg, rgba(16, 185, 129, 0.18), rgba(5, 150, 105, 0.28))';
+                  e.currentTarget.style.borderColor = 'rgba(16, 185, 129, 0.6)';
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+                  <div
+                    style={{
+                      width: '38px',
+                      height: '38px',
+                      borderRadius: '8px',
+                      background: 'rgba(16, 185, 129, 0.25)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: '#34d399',
+                      flexShrink: 0
+                    }}
+                  >
+                    <PenTool size={18} />
+                  </div>
+                  <div>
+                    <strong style={{ display: 'block', fontSize: '0.92rem', color: '#6ee7b7' }}>
+                      No, Arrange Current Schedule in Manual Option
+                    </strong>
+                    <span style={{ fontSize: '0.76rem', color: 'rgba(110, 231, 183, 0.75)' }}>
+                      Keep current seating intact and arrange existing seated students on desks manually
+                    </span>
+                  </div>
+                </div>
+                <ChevronRight size={18} color="#6ee7b7" />
+              </button>
+            </div>
+
+            {/* Cancel text link */}
+            <div style={{ textAlign: 'center', marginTop: '1.25rem' }}>
+              <button
+                onClick={() => setScheduleResetModal((prev) => ({ ...prev, isOpen: false }))}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: 'var(--text-muted)',
+                  fontSize: '0.8rem',
+                  cursor: 'pointer',
+                  textDecoration: 'underline'
+                }}
+              >
+                Cancel and stay on current view
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -2308,7 +2740,6 @@ export default function SeatingAllocationView({ user }) {
                           checked={manualTwoPaper}
                           onChange={async (e) => {
                             const checked = e.target.checked;
-                            setManualTwoPaper(checked);
                             let secId = manualSecondaryExamId;
                             if (checked && (!secId || secId.toString() === selectedExamId.toString()) && exams.length > 1) {
                               const alt = exams.find((x) => x.id.toString() !== selectedExamId.toString());
@@ -2317,10 +2748,35 @@ export default function SeatingAllocationView({ user }) {
                                 setManualSecondaryExamId(secId);
                               }
                             }
+
                             if (checked) {
-                              await ensureManualZeroSeating(selectedExamId, secId, true);
+                              const hasExisting = checkHasExistingSchedule(selectedExamId, secId, true);
+                              if (hasExisting) {
+                                const pExam = exams.find((x) => x.id.toString() === selectedExamId.toString());
+                                const sExam = secId ? exams.find((x) => x.id.toString() === secId.toString()) : null;
+                                const affected = [];
+                                if (pExam && (pExam.allocated_seats_count || 0) > 0) affected.push(pExam);
+                                if (sExam && (sExam.allocated_seats_count || 0) > 0) affected.push(sExam);
+
+                                setScheduleResetModal({
+                                  isOpen: true,
+                                  title: 'Existing Seating Schedule Detected (2 Subjects)',
+                                  message: 'Do you want to reset current schedule?',
+                                  examsToReset: affected,
+                                  actionType: 'TOGGLE_TWO_PAPER',
+                                  targetExamId: selectedExamId,
+                                  targetSecondaryExamId: secId,
+                                  targetTwoPaper: true,
+                                  targetRoomId: manualRoomId
+                                });
+                                return;
+                              }
+                              setManualTwoPaper(true);
+                              await reloadManualData();
+                            } else {
+                              setManualTwoPaper(false);
+                              await reloadManualData();
                             }
-                            await reloadManualData();
                           }}
                           style={{ width: '16px', height: '16px', accentColor: 'var(--primary)', cursor: 'pointer' }}
                         />
@@ -2337,17 +2793,25 @@ export default function SeatingAllocationView({ user }) {
                           value={manualSecondaryExamId}
                           onChange={async (e) => {
                             const newSecId = e.target.value;
-                            setManualSecondaryExamId(newSecId);
                             if (newSecId) {
                               const secExam = exams.find((ex) => ex.id.toString() === newSecId.toString());
-                              if (secExam && secExam.allocated_seats_count > 0) {
-                                await api.clearAllocations(newSecId);
-                                const updatedExams = await api.getAllocationExams();
-                                setExams(updatedExams.data || []);
-                                showToast('Existing seating reset to zero for selected secondary subject.');
+                              if (secExam && (secExam.allocated_seats_count || 0) > 0) {
+                                setScheduleResetModal({
+                                  isOpen: true,
+                                  title: 'Existing Seating Schedule Detected (Secondary Subject)',
+                                  message: `Do you want to reset current schedule for ${secExam.course_code}?`,
+                                  examsToReset: [secExam],
+                                  actionType: 'CHANGE_SECONDARY',
+                                  targetExamId: selectedExamId,
+                                  targetSecondaryExamId: newSecId,
+                                  targetTwoPaper: true,
+                                  targetRoomId: manualRoomId
+                                });
+                                return;
                               }
+                              setManualSecondaryExamId(newSecId);
                               await loadSecondaryEnrolledStudents(newSecId);
-                              await loadManualRoomLayout(manualRoomId, `${selectedExamId},${newSecId}`);
+                              await loadManualRoomLayout(manualRoomId, `${selectedExamId},${newSecId}`, true);
                             }
                           }}
                           style={{
@@ -3503,13 +3967,23 @@ export default function SeatingAllocationView({ user }) {
                           {hasAllocations ? (
                             <>
                               <button
-                                className="btn btn-primary"
-                                onClick={() => handleViewExamPlanInGrid(ex)}
-                                title="Open visual 2D classroom seating layout"
-                                style={{ fontSize: '0.82rem', padding: '0.45rem 0.85rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}
+                                className={expandedExamId === ex.id ? "btn btn-primary" : "btn btn-secondary"}
+                                onClick={() => handleToggleExamSeatingList(ex)}
+                                title={expandedExamId === ex.id ? "Hide student seating roster" : "View complete student seating roster list"}
+                                style={{
+                                  fontSize: '0.82rem',
+                                  padding: '0.45rem 0.85rem',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '0.4rem',
+                                  background: expandedExamId === ex.id ? 'var(--primary)' : 'rgba(99, 102, 241, 0.1)',
+                                  borderColor: 'rgba(99, 102, 241, 0.4)',
+                                  color: expandedExamId === ex.id ? '#fff' : '#a5b4fc'
+                                }}
                               >
-                                <Eye size={14} />
-                                <span>View Matrix</span>
+                                <List size={14} />
+                                <span>{expandedExamId === ex.id ? 'Hide Seating List' : 'View Seating List'}</span>
+                                {expandedExamId === ex.id ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                               </button>
 
                               <button
@@ -3549,6 +4023,132 @@ export default function SeatingAllocationView({ user }) {
                             </button>
                           )}
                         </div>
+
+                        {/* Inline Seating Matrix List View (No 2D classroom visualizer needed, only roster list) */}
+                        {hasAllocations && expandedExamId === ex.id && (
+                          <div
+                            style={{
+                              width: '100%',
+                              marginTop: '1.15rem',
+                              padding: '1.25rem',
+                              background: 'rgba(0, 0, 0, 0.35)',
+                              border: '1px solid rgba(99, 102, 241, 0.25)',
+                              borderRadius: 'var(--radius-sm)',
+                              animation: 'fadeIn 0.2s ease-in-out'
+                            }}
+                          >
+                            {/* Toolbar */}
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1rem' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                                <span className="badge badge-indigo" style={{ fontWeight: 700, fontSize: '0.8rem' }}>
+                                  {ex.course_code}
+                                </span>
+                                <strong style={{ fontSize: '0.92rem', color: 'var(--text-main)' }}>
+                                  Configured Seating Roster ({ex.allocated_seats_count || 0} Students)
+                                </strong>
+                              </div>
+
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', flexWrap: 'wrap' }}>
+                                {/* Search input */}
+                                <div style={{ position: 'relative' }}>
+                                  <Search size={13} color="var(--text-muted)" style={{ position: 'absolute', left: '0.65rem', top: '50%', transform: 'translateY(-50%)' }} />
+                                  <input
+                                    type="text"
+                                    placeholder="Search student or seat..."
+                                    value={examListSearchMap[ex.id] || ''}
+                                    onChange={(e) => setExamListSearchMap((prev) => ({ ...prev, [ex.id]: e.target.value }))}
+                                    style={{
+                                      padding: '0.4rem 0.65rem 0.4rem 2rem',
+                                      borderRadius: 'var(--radius-sm)',
+                                      background: 'rgba(255, 255, 255, 0.05)',
+                                      border: '1px solid var(--border-subtle)',
+                                      color: 'var(--text-main)',
+                                      fontSize: '0.78rem',
+                                      width: '210px'
+                                    }}
+                                  />
+                                </div>
+
+                                <button
+                                  className="btn btn-secondary"
+                                  onClick={() => handleDownloadExamCSV(ex)}
+                                  style={{ fontSize: '0.76rem', padding: '0.35rem 0.75rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}
+                                >
+                                  <Download size={13} />
+                                  <span>Export CSV</span>
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Seating Table */}
+                            {loadingExamAllocationsId === ex.id ? (
+                              <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                                Loading seating list...
+                              </div>
+                            ) : (() => {
+                              const allSeated = examAllocationsMap[ex.id] || [];
+                              const q = (examListSearchMap[ex.id] || '').toLowerCase().trim();
+                              const filtered = q
+                                ? allSeated.filter((st) =>
+                                    st.student_name?.toLowerCase().includes(q) ||
+                                    st.enrollment_no?.toLowerCase().includes(q) ||
+                                    st.seat_number?.toLowerCase().includes(q) ||
+                                    st.room_number?.toLowerCase().includes(q) ||
+                                    st.department?.toLowerCase().includes(q)
+                                  )
+                                : allSeated;
+
+                              if (filtered.length === 0) {
+                                return (
+                                  <div style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--text-dim)', fontSize: '0.82rem' }}>
+                                    {q ? 'No students match your search query.' : 'No seat allocations found for this exam.'}
+                                  </div>
+                                );
+                              }
+
+                              return (
+                                <div style={{ overflowX: 'auto', maxHeight: '420px', overflowY: 'auto' }}>
+                                  <table className="table" style={{ width: '100%', fontSize: '0.8rem', borderCollapse: 'collapse' }}>
+                                    <thead>
+                                      <tr style={{ background: 'rgba(255, 255, 255, 0.03)', borderBottom: '1px solid var(--border-subtle)' }}>
+                                        <th style={{ padding: '0.55rem 0.75rem', textAlign: 'left', width: '45px' }}>#</th>
+                                        <th style={{ padding: '0.55rem 0.75rem', textAlign: 'left' }}>Student Name</th>
+                                        <th style={{ padding: '0.55rem 0.75rem', textAlign: 'left' }}>Enrollment / Roll No</th>
+                                        <th style={{ padding: '0.55rem 0.75rem', textAlign: 'left' }}>Department</th>
+                                        <th style={{ padding: '0.55rem 0.75rem', textAlign: 'left' }}>Classroom / Hall</th>
+                                        <th style={{ padding: '0.55rem 0.75rem', textAlign: 'left' }}>Seat Number</th>
+                                        <th style={{ padding: '0.55rem 0.75rem', textAlign: 'left' }}>Desk Position</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {filtered.map((st, sIdx) => (
+                                        <tr key={st.id || sIdx} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.04)' }}>
+                                          <td style={{ padding: '0.55rem 0.75rem', color: 'var(--text-dim)' }}>{sIdx + 1}</td>
+                                          <td style={{ padding: '0.55rem 0.75rem', fontWeight: 600, color: 'var(--text-main)' }}>{st.student_name}</td>
+                                          <td style={{ padding: '0.55rem 0.75rem', color: 'var(--text-muted)', fontFamily: 'monospace' }}>#{st.enrollment_no}</td>
+                                          <td style={{ padding: '0.55rem 0.75rem', color: 'var(--text-muted)' }}>{st.department} {st.semester ? `(Sem ${st.semester})` : ''}</td>
+                                          <td style={{ padding: '0.55rem 0.75rem' }}>
+                                            <span className="badge badge-indigo" style={{ fontSize: '0.74rem' }}>
+                                              🏛️ {st.room_number || `Room ${st.room_id}`}
+                                            </span>
+                                          </td>
+                                          <td style={{ padding: '0.55rem 0.75rem' }}>
+                                            <span className="badge badge-emerald" style={{ fontSize: '0.74rem', fontWeight: 700 }}>
+                                              🪑 {st.seat_number}
+                                            </span>
+                                          </td>
+                                          <td style={{ padding: '0.55rem 0.75rem', color: 'var(--text-dim)', fontSize: '0.74rem' }}>
+                                            Row {st.row_num}, Col {st.col_num}
+                                          </td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              );
+                            })()}
+                          </div>
+                        )}
                       </div>
                     );
                   })
